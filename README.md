@@ -2,9 +2,7 @@
 Useful length- and strand-based coverage files (bigwig) from small RNA-seq alignments (BAM)
 
 # Author
-Michael J. Axtell
-The Pennsylvania State University
-mja18@psu.edu
+Michael J. Axtell, The Pennsylvania State University, mja18@psu.edu
 
 # Synopsis
 Flexible conversion of BAM-formatted alignment into one or more bigwig coverage files, based on query lengths or readgroups and strandedness. Especially useful when viewed with the JBrowse2 <https://jbrowse.org/jb2/> multi-wiggle track feature.
@@ -14,13 +12,25 @@ Flexible conversion of BAM-formatted alignment into one or more bigwig coverage 
 *operational soon*
 Install `conda` with the bioconda <https://bioconda.github.io> channel properly configured, then:
 
-`conda install -c bioconda shorttracks`
+## Linux, Intel-based Macs
+```
+conda install -c bioconda shorttracks
+```
+
+## Silicon-based Macs
+
+Not all dependencies are available for Silicon-based Macs at this time, so the following work around is required
+```
+conda create --name shorttracks
+conda config --env --set subdir osx-64
+conda install shortstracks
+```
 
 ## Manual install
 First install dependencies / create an environment with these in the path
 - `python` (>=3.10)
-- `samtools` (>= 1.10)
-- `wigToBigWig`
+- `samtools` (>= 1.10) <https://www.htslib.org>
+- `wigToBigWig` <https://genome.ucsc.edu/goldenPath/help/bigWig.html>
 
 Then, copy the `ShortTracks` script somewhere to your $PATH or environment.
 
