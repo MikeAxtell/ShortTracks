@@ -14,7 +14,7 @@ Install `conda` with the bioconda <https://bioconda.github.io> channel properly 
 
 ## Linux, Intel-based Macs
 ```
-conda install -c bioconda shorttracks
+conda install shorttracks
 ```
 
 ## Silicon-based Macs
@@ -22,6 +22,7 @@ conda install -c bioconda shorttracks
 Not all dependencies are available for Silicon-based Macs at this time, so the following work around is required
 ```
 conda create --name shorttracks
+conda activate shorttracks
 conda config --env --set subdir osx-64
 conda install shortstracks
 ```
