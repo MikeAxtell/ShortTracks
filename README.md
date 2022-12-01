@@ -54,6 +54,8 @@ If separate files for each readgroup are produced. The denominator for the read-
 ### readlength
 Four separate files, based on read lengths, are produced: 21, 22, 23-24, and all others. These size separations mirror functionally distinct types of small RNAs from plants.
 
+# Usage scenarios
+
 # How it works
 1. Raw depths by chromosomal position are first calculated using `samtools` and written to disk.
 2. Depths are converted to reads per million and then re-formatted into wiggle files.
