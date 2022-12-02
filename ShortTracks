@@ -75,6 +75,36 @@ if __name__ == '__main__':
     counts = [] # denominators for rpm calculations
 
     # Begin !
+
+    # We need a file of chrom names / lengths for bigwig creation
+    # Pull chrom names and lengths from the header of the BAM file
+    chr_sizes = {} # need this in memory during writing of wiggle files later
+    sq_cmd = f'samtools view -H {args.bamfile} | grep "@SQ"'
+    sq_job = subprocess.run(sq_cmd, shell=True, capture_output=True, text=True)
+    sq_lines = sq_job.stdout.split('\n')
+    sq_file = 'chromSizes.txt'
+    sqfh = open(sq_file, "w")
+    sn_pattern = re.compile('SN:(.*)$')
+    ln_pattern = re.compile('LN:(.*)$')
+    for sq_line in sq_lines:
+        if sq_line:
+            fields = sq_line.split('\t')
+            # No guaranteed order of SN and LN in @SQ lines, so we
+            # . need to search each field
+            sn = ''
+            ln = ''
+            for field in fields:
+                if sn_pattern.match(field):
+                    sn = sn_pattern.match(field).group(1)
+                if ln_pattern.match(field):
+                    ln = ln_pattern.match(field).group(1)
+            sqfh.write(sn)
+            sqfh.write('\t')
+            sqfh.write(ln)
+            sqfh.write('\n')
+            chr_sizes[sn] = int(ln)
+    sqfh.close()
+
     print('')
     print('Preparing commands, counting overall reads')
     if args.mode == 'simple':
@@ -206,13 +236,37 @@ if __name__ == '__main__':
         wigfh = open(wigfile, "w")
 
         last_chr = 'foobarbaz'
+        last_pos = 0
         with open(file) as fh:
             for line in fh:
                 fields = line.rstrip().split('\t')
                 if fields[0] != last_chr:
+                    # might we need a right-hand pad of a 0?
+                    # be on guard for edge of chrom
+                    if last_chr != 'foobarbaz':
+                        if last_pos < chr_sizes[last_chr]:
+                            wigfh.write(str(last_pos + 1))
+                            wigfh.write('\t0\n')
+
                     o = f'variableStep chrom={fields[0]}\n'
                     wigfh.write(o)
+                    last_pos = 0
                 
+                this_pos = int(fields[1])
+                if this_pos > last_pos + 1:
+                    # We want 0's flanking all non-zero numbers
+                    # This makes line plots look better when rendered
+
+                    # write a 0 at last_pos + 1 unless last_pos was zero
+                    if last_pos != 0:
+                        wigfh.write(str(last_pos + 1))
+                        wigfh.write('\t0\n')
+
+                    # possibly write a 0 at this_pos - 1
+                    if (this_pos - 1) > (last_pos + 1):
+                        wigfh.write(str(this_pos - 1))
+                        wigfh.write('\t0\n')
+
                 # write position
                 wigfh.write(fields[1])
                 wigfh.write('\t')
@@ -223,37 +277,14 @@ if __name__ == '__main__':
                 wigfh.write('\n')
 
                 last_chr = fields[0]
+                last_pos = this_pos
+        # end of the final chromosome
+        if last_pos < chr_sizes[last_chr]:
+            wigfh.write(str(last_pos + 1))
+            wigfh.write('\t0\n')
         wigfh.close()
         idx += 1
     
-    # Write bigwig files
-    # We need a file of chrom names / lengths for bigwig creation
-    # Pull chrom names and lengths from the header of the BAM file
-    sq_cmd = f'samtools view -H {args.bamfile} | grep "@SQ"'
-    sq_job = subprocess.run(sq_cmd, shell=True, capture_output=True, text=True)
-    sq_lines = sq_job.stdout.split('\n')
-    sq_file = 'chromSizes.txt'
-    sqfh = open(sq_file, "w")
-    sn_pattern = re.compile('SN:(.*)$')
-    ln_pattern = re.compile('LN:(.*)$')
-    for sq_line in sq_lines:
-        if sq_line:
-            fields = sq_line.split('\t')
-            # No guaranteed order of SN and LN in @SQ lines, so we
-            # . need to search each field
-            sn = ''
-            ln = ''
-            for field in fields:
-                if sn_pattern.match(field):
-                    sn = sn_pattern.match(field).group(1)
-                if ln_pattern.match(field):
-                    ln = ln_pattern.match(field).group(1)
-            sqfh.write(sn)
-            sqfh.write('\t')
-            sqfh.write(ln)
-            sqfh.write('\n')
-    sqfh.close()
-
     # Make bigwigs
     print('')
     print('Writing bigwig files')
@@ -269,32 +300,4 @@ if __name__ == '__main__':
     for wigfile in wigfiles:
         subprocess.run(f'rm -f {wigfile}', shell=True)
     subprocess.run(f'rm -f {sq_file}', shell=True)
-
-    
-    
-
-
-
-            
-                
-                
-
-
-
-
-
-
-
-
-
-
-
-
-
-            
-
-
-
-
-
 
