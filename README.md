@@ -24,7 +24,7 @@ Not all dependencies are available for Silicon-based Macs at this time, so the f
 conda create --name shorttracks
 conda activate shorttracks
 conda config --env --set subdir osx-64
-conda install shortstracks
+conda install shorttracks
 ```
 
 ## Manual install
