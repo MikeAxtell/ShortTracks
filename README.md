@@ -9,7 +9,7 @@ Flexible conversion of BAM-formatted alignment into one or more bigwig coverage 
 
 # Install
 ## Install with conda
-*operational soon*
+
 Install `conda` with the bioconda <https://bioconda.github.io> channel properly configured, then:
 
 ## Linux, Intel-based Macs
