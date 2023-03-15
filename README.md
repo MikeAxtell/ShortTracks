@@ -1,7 +1,7 @@
 # ShortTracks
 Useful length- and strand-based coverage files (bigwig) from small RNA-seq alignments (BAM)
 
-[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/shorttracks/README.html)
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/shorttracks/README.html) ![Conda](https://img.shields.io/conda/dn/bioconda/shorttracks)
 
 # Author
 Michael J. Axtell, The Pennsylvania State University, mja18@psu.edu
