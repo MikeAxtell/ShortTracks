@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-version = '1.1'
+version = '1.2'
 
 # Main script / control is at the BOTTOM of this file
 
@@ -10,6 +10,7 @@ import shutil
 import sys
 import subprocess
 import re
+from collections import Counter
 
 def ShortTracks_args(version):
     parser = argparse.ArgumentParser(prog='ShortTracks')
@@ -49,7 +50,7 @@ def get_read_groups(args):
     rgs = []
     rg = subprocess.run(f'samtools view -H {bam} | grep \'@RG\'', 
     shell=True, text=True, capture_output=True)
-    rgpattern = re.compile('ID:(\S+)$')
+    rgpattern = re.compile(r'ID:(\S+)$')
     rglines = rg.stdout.split('\n')
     for rgline in rglines:
         if rgline:
@@ -107,73 +108,146 @@ if __name__ == '__main__':
 
     print('')
     print('Preparing commands, counting overall reads')
+
+    # Need to check bam_type
+    bam_check_job = subprocess.run(f'samtools view {args.bamfile} | head -n 1', shell=True, text=True, capture_output=True)
+    samline = bam_check_job.stdout.split('\n')[0]
+    sf = samline.split('\t')
+    cd_pat = r'_Cd\d+_\d+'
+    xw_pat = r'\tXW:i:(\d+)'
+    cd_match = re.search(cd_pat, sf[0])
+    xw_match = re.search(xw_pat, samline)
+    if (xw_match) and (cd_match):
+        bam_type = 'condensed'
+    else:
+        bam_type = 'verbose'
+
+
     if args.mode == 'simple':
         # get counts
-        count_job = subprocess.run(f'samtools view -c -F 256 {args.bamfile}',
-        shell=True, text=True, capture_output=True)
-        count = int(count_job.stdout.split('\n')[0])
+        if bam_type == 'verbose':
+            count_job = subprocess.run(f'samtools view -c -F 256 {args.bamfile}',
+            shell=True, text=True, capture_output=True)
+            count = int(count_job.stdout.split('\n')[0])
+        else:
+            count_job = subprocess.run(f'samtools view -F 256 {args.bamfile}',
+            shell=True, text=True, capture_output=True)
+            count = 0
+            for samline in count_job.stdout.splitlines():
+                xw_match = re.search(xw_pat, samline)
+                if(xw_match):
+                    count += int(xw_match.group(1))
+                else:
+                    print('Fatal parse error to count reads, no XW found')
+                    sys.exit()
+
         if args.stranded == True:
             f1 = args.bamfile.replace('.bam', '_p_depths.txt')
-            c1 = (f'samtools view -F 272 -h {args.bamfile} | ' +
-            f'samtools depth - > {f1}')
-            cmds.append(c1)
             d_files.append(f1)
             counts.append(count)
+            if bam_type == 'verbose':
+                c1 = (f'samtools view -F 272 -h {args.bamfile} | ' +
+                f'samtools depth - > {f1}')
+            else:
+                c1 = (f'samtools view -F 276 {args.bamfile}')
+            cmds.append(c1)
 
             f2 = args.bamfile.replace('.bam', '_m_depths.txt')
-            c2 = (f'samtools view -F 256 -f 16 -h {args.bamfile} | ' +
-            f'samtools depth - > {f2}')
-            cmds.append(c2)
             d_files.append(f2)
             counts.append(count)
+            if bam_type == 'verbose':
+                c2 = (f'samtools view -F 256 -f 16 -h {args.bamfile} | ' +
+                f'samtools depth - > {f2}')
+            else:
+                c2 = (f'samtools view -F 260 -f 16 {args.bamfile}')
+            cmds.append(c2)
         else:
             # simple, not-stranded
             f1 = args.bamfile.replace('.bam', '_depths.txt')
-            c1 = (f'samtools view -F 256 -h {args.bamfile} | ' +
-            f'samtools depth - > {f1}')
-            cmds.append(c1)
             d_files.append(f1)
             counts.append(count)
+            if bam_type == 'verbose':
+                c1 = (f'samtools view -F 256 -h {args.bamfile} | ' +
+                f'samtools depth - > {f1}')
+            else:
+                c1 = (f'samtools view -F 260 {args.bamfile}')
+            cmds.append(c1)
+
     elif args.mode == 'readgroup':
         # get read groups or die tryin
         rgs = get_read_groups(args)
         if not rgs:
             sys.exit('No readgroups found in bamfile!')
         for rg in rgs:
-            rg_c_cmd = f'samtools view -c -F 256 -r {rg} {args.bamfile}'
-            rg_c_job = subprocess.run(rg_c_cmd, shell=True,
-            text=True, capture_output=True)
-            count = int(rg_c_job.stdout.split('\n')[0])
+            if bam_type == 'verbose':
+                rg_c_cmd = f'samtools view -c -F 256 -r {rg} {args.bamfile}'
+                rg_c_job = subprocess.run(rg_c_cmd, shell=True,
+                text=True, capture_output=True)
+                count = int(rg_c_job.stdout.split('\n')[0])
+            else:
+                count_job = subprocess.run(f'samtools view -F 256 -r {rg} {args.bamfile}',
+                shell=True, text=True, capture_output=True)
+                count = 0
+                for samline in count_job.stdout.splitlines():
+                    xw_match = re.search(xw_pat, samline)
+                    if(xw_match):
+                        count += int(xw_match.group(1))
+                    else:
+                        print('Fatal parse error to count reads, no XW found')
+                        sys.exit()
             if args.stranded == True:
                 repl = '_' + rg + '_p_depths.txt'
                 f1 = args.bamfile.replace('.bam', repl)
-                c1 = (f'samtools view -F 272 -r {rg} -h {args.bamfile} | ' +
-                f'samtools depth - > {f1}')
-                cmds.append(c1)
                 d_files.append(f1)
                 counts.append(count)
+                if bam_type == 'verbose':
+                    c1 = (f'samtools view -F 272 -r {rg} -h {args.bamfile} | ' +
+                    f'samtools depth - > {f1}')
+                else:
+                    c1 = (f'samtools view -F 276 -r {rg} {args.bamfile}')
+                cmds.append(c1)
 
                 repl = '_' + rg + '_m_depths.txt'
                 f2 = args.bamfile.replace('.bam', repl)
-                c2 = (f'samtools view -F 256 -f 16 -r {rg} -h {args.bamfile} | ' +
-                f'samtools depth - > {f2}')
-                cmds.append(c2)
                 d_files.append(f2)
                 counts.append(count)
+                if bam_type == 'verbose':
+                    c2 = (f'samtools view -F 256 -f 16 -r {rg} -h {args.bamfile} | ' +
+                    f'samtools depth - > {f2}')
+                else:
+                    c2 = (f'samtools view -F 260 -f 16 -r {rg} {args.bamfile}')
+                cmds.append(c2)
+
             else:
                 # readgroup, not-stranded
                 repl = '_' + rg + '_depths.txt'
                 f1 = args.bamfile.replace('.bam', repl)
-                c1 = (f'samtools view -F 256 -r {rg} -h {args.bamfile} | ' +
-                f'samtools depth - > {f1}')
-                cmds.append(c1)
                 d_files.append(f1)
                 counts.append(count)
+                if bam_type == 'verbose':
+                    c1 = (f'samtools view -F 256 -r {rg} -h {args.bamfile} | ' +
+                    f'samtools depth - > {f1}')
+                else:
+                    c1 = (f'samtools view -F 260 -r {rg} {args.bamfile}')
+                cmds.append(c1)
+
     elif args.mode == 'readlength':
         # counts from the whole file, like for simple
-        count_job = subprocess.run(f'samtools view -c -F 256 {args.bamfile}',
-        shell=True, text=True, capture_output=True)
-        count = int(count_job.stdout.split('\n')[0])
+        if bam_type == 'verbose':
+            count_job = subprocess.run(f'samtools view -c -F 256 {args.bamfile}',
+            shell=True, text=True, capture_output=True)
+            count = int(count_job.stdout.split('\n')[0])
+        else:
+            count_job = subprocess.run(f'samtools view -F 256 {args.bamfile}',
+            shell=True, text=True, capture_output=True)
+            count = 0
+            for samline in count_job.stdout.splitlines():
+                xw_match = re.search(xw_pat, samline)
+                if(xw_match):
+                    count += int(xw_match.group(1))
+                else:
+                    print('Fatal parse error to count reads, no XW found')
+                    sys.exit()
 
         # define expressions for qlen selection
         filts = ['"qlen==21"', '"qlen==22"', '"qlen==23 || qlen==24"']
@@ -186,38 +260,84 @@ if __name__ == '__main__':
             if args.stranded == True:
                 repl = '_' + filt_names[idx] + '_p_depths.txt'
                 f1 = args.bamfile.replace('.bam', repl)
-                c1 = (f'samtools view -F 272 -e {filt_expression} -h {args.bamfile} | ' +
-                f'samtools depth - > {f1}')
-                cmds.append(c1)
                 d_files.append(f1)
                 counts.append(count)
+                if bam_type == 'verbose':
+                    c1 = (f'samtools view -F 272 -e {filt_expression} -h {args.bamfile} | ' +
+                    f'samtools depth - > {f1}')
+                else:
+                    c1 = (f'samtools view -F 276 -e {filt_expression} {args.bamfile}')
+                cmds.append(c1)
+
 
                 repl = '_' + filt_names[idx] + '_m_depths.txt'
                 f2 = args.bamfile.replace('.bam', repl)
-                c2 = (f'samtools view -F 256 -f 16 -e {filt_expression} -h {args.bamfile} | ' +
-                f'samtools depth - > {f2}')
-                cmds.append(c2)
                 d_files.append(f2)
                 counts.append(count)
+                if bam_type == 'verbose':
+                    c2 = (f'samtools view -F 256 -f 16 -e {filt_expression} -h {args.bamfile} | ' +
+                    f'samtools depth - > {f2}')
+                else:
+                     c2 = (f'samtools view -F 260 -f 16 -e {filt_expression} {args.bamfile}')
+                cmds.append(c2)
+
             else:
                 # readgroup, not-stranded
                 repl = '_' + filt_names[idx] + '_depths.txt'
                 f1 = args.bamfile.replace('.bam', repl)
-                c1 = (f'samtools view -F 256 -e {filt_expression} -h {args.bamfile} | ' +
-                f'samtools depth - > {f1}')
-                cmds.append(c1)
                 d_files.append(f1)
                 counts.append(count)
+                if bam_type == 'verbose':
+                    c1 = (f'samtools view -F 256 -e {filt_expression} -h {args.bamfile} | ' +
+                    f'samtools depth - > {f1}')
+                else:
+                    c1 = (f'samtools view -F 260 -e {filt_expression} {args.bamfile}')
+                cmds.append(c1)
             idx += 1
     
     # Execute jobs
     print('')
     print('Getting raw depths')
-    for cmd in cmds:
+    for index, cmd in enumerate(cmds):
         print(cmd)
-        subprocess.run(cmd, shell=True)
+        if bam_type == 'verbose':
+            subprocess.run(cmd, shell=True)
+        else:
+            outfile = d_files[index]
+            with open(outfile, "w") as of:
+                sv = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+                last_chr = 'notachromname'
+                for samline in sv.stdout.splitlines():
+                    sf = samline.split('\t')
+                    if sf[2] != last_chr:
+                        if last_chr != 'notachromname':
+                            # flush the last chromosome data
+                            for key in sorted(d.keys()):
+                                this_depth = str(d[key])
+                                of.write(f'{last_chr}\t{key}\t{this_depth}\n')
+                        # reset for new
+                        d = Counter()
+                    xw_match = re.search(xw_pat, samline)
+                    pos = int(sf[3])
+                    endpos = pos + len(sf[9])
+                    if(xw_match):
+                        for i in range(pos, endpos):
+                            d[i] += int(xw_match.group(1))
+                    else:
+                        print('Fatal parse error to parse depths, no XW found')
+                        sys.exit()
+                    last_chr = sf[2]
+                
+                # Need to do the final chr
+                for key in sorted(d.keys()):
+                    this_depth = str(d[key])
+                    of.write(f'{last_chr}\t{key}\t{this_depth}\n')
+
         print('')
     
+    # testing
+    # sys.exit()
+
     # Write wiggle files, converting to rpm, negative to - strand
     print('')
     print('Writing wiggle files')
