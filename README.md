@@ -47,6 +47,7 @@ Then, copy the `ShortTracks` script somewhere to your $PATH or environment.
 - `--mode` : Set the mode. Either `simple`, `readgroup`, or `readlength`. Defaults to `simple`
 - `--stranded` : If set, create a plus and minus-strand track for each trim.
 - `--bamfile` (required) : Path to the bamfile being processed
+  - As of version 1.2, ShortTracks understands and properly handles both 'verbose' BAM files (where multiple reads of the same sequence are present as separate alignment lines at the same genomic position) and [ShortStack's](https://github.com/MikeAxtell/ShortStack) 'condensed' BAM files (where multiple reads of the same sequence have been collapsed into single alignments at any one genomic position). For more about 'condensed' BAM files for small RNAs, see [ShortStack's](https://github.com/MikeAxtell/ShortStack) documentation.
 
 ## Modes
 ### simple
