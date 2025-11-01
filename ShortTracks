@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-version = '1.2'
+version = '1.3'
 
 # Main script / control is at the BOTTOM of this file
 
@@ -10,6 +10,8 @@ import shutil
 import sys
 import subprocess
 import re
+import tempfile
+import os
 from collections import Counter
 
 def ShortTracks_args(version):
@@ -83,28 +85,34 @@ if __name__ == '__main__':
     sq_cmd = f'samtools view -H {args.bamfile} | grep "@SQ"'
     sq_job = subprocess.run(sq_cmd, shell=True, capture_output=True, text=True)
     sq_lines = sq_job.stdout.split('\n')
-    sq_file = 'chromSizes.txt'
-    sqfh = open(sq_file, "w")
-    sn_pattern = re.compile('SN:(.*)$')
-    ln_pattern = re.compile('LN:(.*)$')
-    for sq_line in sq_lines:
-        if sq_line:
-            fields = sq_line.split('\t')
-            # No guaranteed order of SN and LN in @SQ lines, so we
-            # . need to search each field
-            sn = ''
-            ln = ''
-            for field in fields:
-                if sn_pattern.match(field):
-                    sn = sn_pattern.match(field).group(1)
-                if ln_pattern.match(field):
-                    ln = ln_pattern.match(field).group(1)
-            sqfh.write(sn)
-            sqfh.write('\t')
-            sqfh.write(ln)
-            sqfh.write('\n')
-            chr_sizes[sn] = int(ln)
-    sqfh.close()
+    #sq_file = 'chromSizes.txt'
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+        print(f"Temporary file for chrom sizes: {tmp.name}") 
+        #sqfh = open(sq_file, "w")
+        sn_pattern = re.compile('SN:(.*)$')
+        ln_pattern = re.compile('LN:(.*)$')
+        for sq_line in sq_lines:
+            if sq_line:
+                fields = sq_line.split('\t')
+                # No guaranteed order of SN and LN in @SQ lines, so we
+                # . need to search each field
+                sn = ''
+                ln = ''
+                for field in fields:
+                    if sn_pattern.match(field):
+                        sn = sn_pattern.match(field).group(1)
+                    if ln_pattern.match(field):
+                        ln = ln_pattern.match(field).group(1)
+                #sqfh.write(sn)
+                tmp.write(sn)
+                #sqfh.write('\t')
+                tmp.write('\t')
+                #sqfh.write(ln)
+                tmp.write(ln)
+                #sqfh.write('\n')
+                tmp.write('\n')
+                chr_sizes[sn] = int(ln)
+        #sqfh.close()
 
     print('')
     print('Preparing commands, counting overall reads')
@@ -329,9 +337,10 @@ if __name__ == '__main__':
                     last_chr = sf[2]
                 
                 # Need to do the final chr
-                for key in sorted(d.keys()):
-                    this_depth = str(d[key])
-                    of.write(f'{last_chr}\t{key}\t{this_depth}\n')
+                if last_chr != 'notachromname':
+                    for key in sorted(d.keys()):
+                        this_depth = str(d[key])
+                        of.write(f'{last_chr}\t{key}\t{this_depth}\n')
 
         print('')
     
@@ -399,9 +408,11 @@ if __name__ == '__main__':
                 last_chr = fields[0]
                 last_pos = this_pos
         # end of the final chromosome
-        if last_pos < chr_sizes[last_chr]:
-            wigfh.write(str(last_pos + 1))
-            wigfh.write('\t0\n')
+        #if last_chr != 'notachromname':
+        if last_chr in chr_sizes:
+            if last_pos < chr_sizes[last_chr]:
+                wigfh.write(str(last_pos + 1))
+                wigfh.write('\t0\n')
         wigfh.close()
         idx += 1
     
@@ -410,14 +421,15 @@ if __name__ == '__main__':
     print('Writing bigwig files')
     for wigfile in wigfiles:
         bwfile = wigfile.replace('.wig', '.bw')
-        cmd = f'wigToBigWig {wigfile} {sq_file} {bwfile}'
+        #cmd = f'wigToBigWig {wigfile} {sq_file} {bwfile}'
+        cmd = f'wigToBigWig {wigfile} {tmp.name} {bwfile}'
         print(cmd)
         subprocess.run(cmd, shell=True)
     
     # Intermediate file clean up
-    for d_file in d_files:
-        subprocess.run(f'rm -f {d_file}', shell=True)
-    for wigfile in wigfiles:
-        subprocess.run(f'rm -f {wigfile}', shell=True)
-    subprocess.run(f'rm -f {sq_file}', shell=True)
-
+    #for d_file in d_files:
+        #subprocess.run(f'rm -f {d_file}', shell=True)
+    #for wigfile in wigfiles:
+        #subprocess.run(f'rm -f {wigfile}', shell=True)
+    #subprocess.run(f'rm -f {sq_file}', shell=True)
+    os.remove(tmp.name)
